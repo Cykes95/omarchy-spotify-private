@@ -1,0 +1,13 @@
+# Nunca versionar secretos o estado efímero.
+*.token
+*.secret
+*.key
+*.pem
+credentials.json
+session.json
+settings.json
+oauth/
+zeroconf/
+backend.sock
+cache/
+state/

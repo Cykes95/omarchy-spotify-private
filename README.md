@@ -12,9 +12,15 @@ la barra de Omarchy. No contiene credenciales, tokens ni datos de sesión.
 - El backend solo puede arrancar bajo demanda y queda inactivo tras apagarlo.
 - El icono de la barra se oculta mientras el backend está apagado.
 - Hay controles **Apagar** en el minirreproductor y en el reproductor completo.
+- El catálogo se conserva localmente para que la biblioteca y las listas
+  habituales aparezcan al instante al reabrir el cliente.
+- El transporte de Spotify admite hasta tres lecturas simultáneas y reduce
+  temporalmente a una cuando Spotify aplica rate limiting.
 
 Consulta [docs/estado-tecnico.md](docs/estado-tecnico.md) para el inventario
-de cambios, las verificaciones y el plan de continuación.
+de cambios, las verificaciones y el plan de continuación. El código activo se
+mantiene en `~/.config/omarchy/plugins/quickshell.spotify/`; este proyecto
+documenta la personalización privada y no replica credenciales ni cachés.
 
 ## Alcance
 

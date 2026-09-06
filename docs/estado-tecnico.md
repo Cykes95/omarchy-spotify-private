@@ -38,20 +38,55 @@ Rutas importantes:
 
 ### Rendimiento y selección de canciones
 
-Spotify devolvía respuestas HTTP 429 durante cargas concurrentes de la UI. Se
-ajustó el planificador local para hacer una sola petición en vuelo y espaciar
-las peticiones de catálogo. Además, cuando el backend local está preparado,
-una segunda selección de canción evita esperar una consulta web pendiente y
-se envía directamente por el socket local.
+Spotify devolvía respuestas HTTP 429 durante cargas concurrentes de la UI. El
+planificador local usa ahora hasta tres lecturas en vuelo y mantiene una pausa
+mínima entre sus arranques. Si Spotify responde `429`, baja temporalmente a
+una sola solicitud y respeta `Retry-After`. Las acciones interactivas tienen
+prioridad sobre las precargas; además, el backend local evita que una segunda
+selección de canción espere una consulta web pendiente.
 
 Archivos modificados:
 
-- `Api.js`: `API_MAX_IN_FLIGHT = 1` y pausa mínima de 1250 ms.
-- `SpotifyApi.qml`: respeta la pausa global entre peticiones.
-- `Service.qml`: las cargas consecutivas usan el socket del backend nativo.
+- `Api.js`: límite adaptable de tres lecturas y pausa mínima de 1250 ms.
+- `SpotifyApi.qml`: cola con prioridades, pausa global y retroceso al recibir
+  `429`.
+- `Service.qml`: las cargas consecutivas usan el socket del backend nativo y
+  programa precargas cancelables.
 
 Nota: la pausa se aplica para evitar el límite de la API; no representa la
 latencia de reproducción local.
+
+### Caché de catálogo y navegación (2026-09-06)
+
+El estado persistente del catálogo se guarda fuera del proyecto en
+`~/.local/state/omarchy-spotify/catalog-cache.json`. No contiene tokens ni
+audio; solo metadatos normalizados, URIs de Spotify y URLs de portada.
+
+- Restaura al inicio las playlists seguidas, Canciones que te gustan, álbumes
+  guardados y, cuando ya se cargaron, las secciones de inicio.
+- Guarda hasta 50 pistas por playlist y por álbum precargado. Las playlists y
+  álbumes se calientan gradualmente mientras el cliente está inactivo.
+- Las precargas son de prioridad baja y se cancelan al abrir contenido o
+  ejecutar una acción interactiva.
+- Los álbumes de la barra lateral abren primero un detalle vacío con
+  `Cargando…`; nunca deben reutilizar visualmente la lista anterior.
+- La playlist personalizada `DJ` de Spotify se excluye por su identificador,
+  porque no es reproducible por este cliente.
+
+Archivos de la instalación local implicados: `Api.js`, `SpotifyApi.qml`,
+`Service.qml`, `Panel.qml` y `tests/tst_spotify_api.qml`.
+
+Verificaciones efectuadas:
+
+```bash
+omarchy plugin validate ~/.config/omarchy/plugins/quickshell.spotify
+/usr/lib/qt6/bin/qmltestrunner \
+  -input ~/.config/omarchy/plugins/quickshell.spotify/tests/tst_spotify_api.qml
+```
+
+Las pruebas específicas de caché y cancelación de precargas pasan. El conjunto
+histórico del transporte conserva fallos de temporización no relacionados que
+ya existían antes de esta modificación.
 
 ### Apagado completo y arranque bajo demanda
 

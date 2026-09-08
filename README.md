@@ -37,6 +37,26 @@ incluir credenciales, datos de sesión ni información de la cuenta de Spotify.
 El objetivo siguiente es mantener la traducción al español solo en la copia
 local del plugin.
 
+## Instalación
+
+Para instalar o actualizar todo en una sola orden (plugin, backend nativo compilado, unidades systemd, menú del sistema, lanzador e iconos):
+
+```bash
+git clone https://github.com/Cykes95/omarchy-spotify-private.git
+cd omarchy-spotify-private
+./install.sh
+```
+
+Opciones útiles de `./install.sh`:
+- `--link`: crea un enlace simbólico al plugin en lugar de copiar archivos (ideal para desarrollo local).
+- `--section [left|center|right]`: define la posición del widget en la barra (por defecto `left`).
+- `--skip-backend-build`: omite la compilación del backend Rust si ya existe el binario.
+
+Para desinstalar por completo:
+```bash
+./uninstall.sh
+```
+
 ## Inicio rápido
 
 ```bash

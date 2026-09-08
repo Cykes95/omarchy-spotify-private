@@ -1,0 +1,23 @@
+[Unit]
+Description=Omarchy Spotify plugin playback backend
+Documentation=https://github.com/stappmus/QuickshellSpotify
+After=graphical-session.target sound.target
+Wants=sound.target
+Conflicts=omarchy-spotifyd.service
+# The on-demand launcher creates this marker immediately before an explicit
+# start. XDG_RUNTIME_DIR is recreated on login, so no previous session can
+# cause the receiver to come back after boot.
+ConditionPathExists=%t/omarchy-spotify/allow-start
+
+[Service]
+Type=simple
+Environment=PULSE_LATENCY_MSEC=30
+Environment=TOKIO_WORKER_THREADS=2
+ExecStart=%h/.local/lib/omarchy-spotify/omarchy-spotify-backend --config-path=%h/.config/omarchy-spotify/spotifyd.conf
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict

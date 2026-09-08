@@ -83,6 +83,8 @@ Item {
   property var albumDetails: ({})
   property var lastPlayedTrack: null
   property string lastPlayedContextUri: ""
+  property var lastPlayedContextItems: []
+  property string pendingSkipAfterStart: ""
   property var playlistWarmupQueue: []
   property bool playlistWarmupRunning: false
   property var albumWarmupQueue: []
@@ -655,7 +657,8 @@ Item {
       playlistDetails: playlistDetails,
       albumDetails: albumDetails,
       lastTrack: lastPlayedTrack,
-      lastContextUri: lastPlayedContextUri
+      lastContextUri: lastPlayedContextUri,
+      lastContextItems: lastPlayedContextItems
     }
   }
 
@@ -706,6 +709,7 @@ Item {
       if (cached.lastTrack && cached.lastTrack.id) {
         lastPlayedTrack = cached.lastTrack
         lastPlayedContextUri = String(cached.lastContextUri || "")
+        lastPlayedContextItems = Array.isArray(cached.lastContextItems) ? cached.lastContextItems : []
         catalogCacheApplied = true
       }
     }
@@ -775,6 +779,15 @@ Item {
       externalUrl: String(currentExternalUrl || item.externalUrl || "")
     }
 
+    if (context && context !== lastPlayedContextUri) {
+      lastPlayedContextUri = context
+      var ctxTracks = contextTracksForUri(context)
+      if (ctxTracks && ctxTracks.length) lastPlayedContextItems = ctxTracks.slice(0, 50)
+    } else if ((!lastPlayedContextItems || !lastPlayedContextItems.length) && context) {
+      var ctxTracks = contextTracksForUri(context)
+      if (ctxTracks && ctxTracks.length) lastPlayedContextItems = ctxTracks.slice(0, 50)
+    }
+
     if (lastPlayedTrack
         && lastPlayedTrack.id === newTrack.id
         && lastPlayedTrack.name === newTrack.name
@@ -787,6 +800,53 @@ Item {
     lastPlayedTrack = newTrack
     lastPlayedContextUri = context
     scheduleCatalogCacheSave()
+  }
+
+  function contextTracksForUri(uri) {
+    var raw = String(uri || "")
+    if (!raw) return lastPlayedContextItems || []
+    var playlistMatch = raw.match(/^spotify:playlist:([a-zA-Z0-9]+)/)
+    if (playlistMatch && playlistDetails[playlistMatch[1]]) {
+      var plDetail = playlistDetails[playlistMatch[1]]
+      if (plDetail && Array.isArray(plDetail.items) && plDetail.items.length)
+        return plDetail.items
+    }
+    var albumMatch = raw.match(/^spotify:album:([a-zA-Z0-9]+)/)
+    if (albumMatch && albumDetails[albumMatch[1]]) {
+      var albDetail = albumDetails[albumMatch[1]]
+      if (albDetail && Array.isArray(albDetail.items) && albDetail.items.length)
+        return albDetail.items
+    }
+    if (raw === "spotify:user:saved" || raw.indexOf(":collection") >= 0) {
+      if (Array.isArray(savedTracks) && savedTracks.length) return savedTracks
+    }
+    if (lastPlayedContextItems && lastPlayedContextItems.length) {
+      return lastPlayedContextItems
+    }
+    return []
+  }
+
+  function findAdjacentTrack(direction) {
+    if (!lastPlayedTrack || !lastPlayedTrack.id) return null
+    var tracks = contextTracksForUri(lastPlayedContextUri)
+    if (!Array.isArray(tracks) || !tracks.length) return null
+    var currentIdx = -1
+    for (var i = 0; i < tracks.length; i++) {
+      if (tracks[i] && (String(tracks[i].id) === String(lastPlayedTrack.id)
+          || String(tracks[i].uri) === String(lastPlayedTrack.uri))) {
+        currentIdx = i
+        break
+      }
+    }
+    if (currentIdx < 0) return null
+    var targetIdx = currentIdx + direction
+    if (targetIdx >= 0 && targetIdx < tracks.length) {
+      return { item: tracks[targetIdx], items: tracks }
+    }
+    if (direction > 0 && targetIdx >= tracks.length && tracks.length > 0) {
+      return { item: tracks[0], items: tracks }
+    }
+    return null
   }
 
   function scheduleAlbumWarmup() {
@@ -3299,6 +3359,12 @@ Item {
     deviceProbeAttempts = 0
     noteActivity()
     if (contextUri) lastPlayedContextUri = String(contextUri)
+    if (Array.isArray(sourceItems) && sourceItems.length) {
+      lastPlayedContextItems = sourceItems.slice(0, 50)
+    } else if (contextUri) {
+      var ctxTracks = contextTracksForUri(contextUri)
+      if (ctxTracks && ctxTracks.length) lastPlayedContextItems = ctxTracks.slice(0, 50)
+    }
     if (item && item.id) {
       lastPlayedTrack = {
         kind: "item",
@@ -3562,6 +3628,16 @@ Item {
   function next() {
     noteActivity()
     if (sendSonosControl("next", "")) return
+    if (!playing && (!hasMedia || playbackState === MprisPlaybackState.Stopped || !hasLocalPlayer || !activePlayer.canGoNext) && lastPlayedTrack) {
+      var adjacent = findAdjacentTrack(1)
+      if (adjacent && adjacent.item) {
+        playItem(adjacent.item, adjacent.items, lastPlayedContextUri, "")
+        return
+      }
+      playItem(lastPlayedTrack, null, lastPlayedContextUri, "")
+      pendingSkipAfterStart = "next"
+      return
+    }
     if (!useRemotePlayback && hasLocalPlayer && activePlayer.canGoNext) activePlayer.next()
     else remotePlayerAction("POST", "/me/player/next", controlQuery())
   }
@@ -3569,6 +3645,16 @@ Item {
   function previous() {
     noteActivity()
     if (sendSonosControl("previous", "")) return
+    if (!playing && (!hasMedia || playbackState === MprisPlaybackState.Stopped || !hasLocalPlayer || !activePlayer.canGoPrevious) && lastPlayedTrack) {
+      var adjacent = findAdjacentTrack(-1)
+      if (adjacent && adjacent.item) {
+        playItem(adjacent.item, adjacent.items, lastPlayedContextUri, "")
+        return
+      }
+      playItem(lastPlayedTrack, null, lastPlayedContextUri, "")
+      pendingSkipAfterStart = "previous"
+      return
+    }
     if (!useRemotePlayback && hasLocalPlayer && activePlayer.canGoPrevious) activePlayer.previous()
     else remotePlayerAction("POST", "/me/player/previous", controlQuery())
   }
@@ -3964,11 +4050,19 @@ Item {
     cancelSleepTimer(false)
     lastPlayedTrack = null
     lastPlayedContextUri = ""
+    lastPlayedContextItems = []
+    pendingSkipAfterStart = ""
   }
 
   onPlayingChanged: {
     noteActivity()
     if (playing && currentTrackId) recordLastPlayedTrack()
+    if (playing && pendingSkipAfterStart) {
+      var skip = pendingSkipAfterStart
+      pendingSkipAfterStart = ""
+      if (skip === "next") next()
+      else if (skip === "previous") previous()
+    }
   }
   onPlaybackStateChanged: {
     if ((sleepMode === "context" || sleepMode === "track")

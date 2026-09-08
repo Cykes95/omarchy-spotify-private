@@ -1044,6 +1044,26 @@ function catalogCacheRecord(value) {
     }
   }
   var lastContextUri = String(source.lastContextUri || "")
+  var lastContextItems = []
+  if (Array.isArray(source.lastContextItems)) {
+    for (var ci = 0; ci < source.lastContextItems.length && ci < 50; ci++) {
+      var cit = source.lastContextItems[ci]
+      if (!cit || !cit.id) continue
+      lastContextItems.push({
+        kind: "item",
+        type: String(cit.type || "track"),
+        id: String(cit.id || ""),
+        uri: String(cit.uri || ("spotify:track:" + cit.id)),
+        name: String(cit.name || "Sin título"),
+        subtitle: String(cit.subtitle || cit.artist || ""),
+        album: String(cit.album || ""),
+        artists: arrayValues(cit.artists),
+        imageUrl: String(cit.imageUrl || cit.artUrl || ""),
+        durationMs: Math.max(0, Number(cit.durationMs) || 0),
+        externalUrl: String(cit.externalUrl || "")
+      })
+    }
+  }
 
   var record = {
     version: 2,
@@ -1062,7 +1082,8 @@ function catalogCacheRecord(value) {
     playlistDetails: playlistDetails,
     albumDetails: albumDetails,
     lastTrack: lastTrack,
-    lastContextUri: lastContextUri
+    lastContextUri: lastContextUri,
+    lastContextItems: lastContextItems
   }
   return JSON.stringify(record).length <= CATALOG_CACHE_LIMIT ? record : ({})
 }

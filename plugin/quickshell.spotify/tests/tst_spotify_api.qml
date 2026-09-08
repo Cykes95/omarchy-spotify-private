@@ -148,6 +148,7 @@ TestCase {
       topArtists: rows,
       lastTrack: lastTrackSample,
       lastContextUri: "spotify:playlist:pl1",
+      lastContextItems: [lastTrackSample],
       playlistDetails: {
         one: { item: { id: "one", type: "playlist" }, items: rows },
         invalid: { item: { id: "invalid", type: "album" }, items: rows }
@@ -167,6 +168,8 @@ TestCase {
     compare(cache.lastTrack.id, "track1")
     compare(cache.lastTrack.name, "Track One")
     compare(cache.lastContextUri, "spotify:playlist:pl1")
+    compare(cache.lastContextItems.length, 1)
+    compare(cache.lastContextItems[0].id, "track1")
     verify(cache.homeLoaded)
     verify(cache.secret === undefined)
     var parsed = Api.parseCatalogCache(Api.encodeCatalogCache(cache))
@@ -176,6 +179,8 @@ TestCase {
     compare(parsed.lastTrack.id, "track1")
     compare(parsed.lastTrack.name, "Track One")
     compare(parsed.lastContextUri, "spotify:playlist:pl1")
+    compare(parsed.lastContextItems.length, 1)
+    compare(parsed.lastContextItems[0].id, "track1")
     compare(Api.parseCatalogCache("not json").savedAt, 0)
   }
 

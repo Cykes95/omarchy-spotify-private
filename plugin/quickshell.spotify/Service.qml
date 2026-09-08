@@ -81,6 +81,8 @@ Item {
   property bool catalogCacheApplied: false
   property var playlistDetails: ({})
   property var albumDetails: ({})
+  property var lastPlayedTrack: null
+  property string lastPlayedContextUri: ""
   property var playlistWarmupQueue: []
   property bool playlistWarmupRunning: false
   property var albumWarmupQueue: []
@@ -123,10 +125,14 @@ Item {
   property int playbackPositionTick: 0
   property string remoteControlDiscoveryKey: ""
   readonly property var remoteTrack: remotePlayback ? remotePlayback.item : null
-  readonly property var currentArtists: remoteTrack
-    && (useRemotePlayback || (currentTrackId !== ""
-      && String(remoteTrack.id || "") === currentTrackId))
-    ? Api.arrayValues(remoteTrack.artists) : []
+  readonly property var currentArtists: {
+    if (remoteTrack && (useRemotePlayback || (currentTrackId !== ""
+        && String(remoteTrack.id || "") === currentTrackId)))
+      return Api.arrayValues(remoteTrack.artists)
+    if (lastPlayedTrack && lastPlayedTrack.artists && lastPlayedTrack.artists.length > 0)
+      return Api.arrayValues(lastPlayedTrack.artists)
+    return []
+  }
   readonly property bool currentArtistContextAvailable: Api.artistContextAvailable(
     useRemotePlayback && remoteTrack ? remoteTrack.type : "",
     currentTrackId, currentArtists)
@@ -179,16 +185,24 @@ Item {
     : MprisPlaybackState.Stopped
   readonly property string title: useRemotePlayback && remoteTrack
     ? String(remoteTrack.name || "")
-    : (hasLocalPlayer ? String(activePlayer.trackTitle || "") : "")
+    : (hasLocalPlayer && (activePlayer.trackTitle || activePlayer.trackArtist)
+      ? String(activePlayer.trackTitle || "")
+      : (lastPlayedTrack ? String(lastPlayedTrack.name || "") : ""))
   readonly property string artist: useRemotePlayback && remoteTrack
     ? String(remoteTrack.subtitle || "")
-    : (hasLocalPlayer ? String(activePlayer.trackArtist || "") : "")
+    : (hasLocalPlayer && (activePlayer.trackTitle || activePlayer.trackArtist)
+      ? String(activePlayer.trackArtist || "")
+      : (lastPlayedTrack ? String(lastPlayedTrack.subtitle || "") : ""))
   readonly property string album: useRemotePlayback && remoteTrack
     ? String(remoteTrack.album || "")
-    : (hasLocalPlayer ? String(activePlayer.trackAlbum || "") : "")
+    : (hasLocalPlayer && activePlayer.trackAlbum
+      ? String(activePlayer.trackAlbum || "")
+      : (lastPlayedTrack ? String(lastPlayedTrack.album || "") : ""))
   readonly property string artUrl: useRemotePlayback && remoteTrack
     ? String(remoteTrack.imageUrl || "")
-    : (hasLocalPlayer ? String(activePlayer.trackArtUrl || "") : "")
+    : (hasLocalPlayer && activePlayer.trackArtUrl
+      ? String(activePlayer.trackArtUrl || "")
+      : (lastPlayedTrack ? String(lastPlayedTrack.imageUrl || "") : ""))
   readonly property real positionSeconds: {
     playbackPositionTick
     if (!useRemotePlayback) return hasLocalPlayer && activePlayer.positionSupported
@@ -200,8 +214,9 @@ Item {
   }
   readonly property real lengthSeconds: useRemotePlayback && remoteTrack
     ? Math.max(0, Number(remoteTrack.durationMs) || 0) / 1000
-    : (hasLocalPlayer && activePlayer.lengthSupported
-      ? Math.max(0, Number(activePlayer.length) || 0) : 0)
+    : (hasLocalPlayer && activePlayer.lengthSupported && (activePlayer.trackTitle || activePlayer.trackArtist)
+      ? Math.max(0, Number(activePlayer.length) || 0)
+      : (lastPlayedTrack ? Math.max(0, Number(lastPlayedTrack.durationMs || 0)) / 1000 : 0))
   readonly property real playbackVolume: useRemotePlayback && remoteDevice
     ? displayedRemoteVolumePercent(remoteDevice) / 100
     : (hasLocalPlayer && activePlayer.volumeSupported
@@ -229,7 +244,10 @@ Item {
   readonly property string currentUri: useRemotePlayback && remoteTrack
     ? String(remoteTrack.uri || "") : metadataString("xesam:url")
   readonly property string currentExternalUrl: useRemotePlayback && remoteTrack
-    ? String(remoteTrack.externalUrl || spotifyWebUrl(currentUri)) : spotifyWebUrl(currentUri)
+    ? String(remoteTrack.externalUrl || spotifyWebUrl(currentUri))
+    : (lastPlayedTrack && lastPlayedTrack.externalUrl
+      ? String(lastPlayedTrack.externalUrl)
+      : spotifyWebUrl(currentUri || (lastPlayedTrack ? lastPlayedTrack.uri : "")))
   readonly property string currentTrackId: {
     // When a remote device owns playback, stale metadata from an idle local
     // spotifyd player must not turn a podcast episode into a song.
@@ -247,12 +265,19 @@ Item {
     id = Api.spotifyTrackId(metadataString("mpris:trackid"))
     if (id) return id
 
-    return remoteTrack && remotePlaybackIsLocal && remoteTrack.type === "track"
-      ? String(remoteTrack.id || "").trim() : ""
+    if (remoteTrack && remotePlaybackIsLocal && remoteTrack.type === "track")
+      return String(remoteTrack.id || "").trim()
+
+    return lastPlayedTrack ? String(lastPlayedTrack.id || "") : ""
   }
-  readonly property var currentTrackItem: Api.currentPlaybackTrack(
-    currentTrackId, remoteTrack, title, artist, album, artUrl,
-    lengthSeconds, currentExternalUrl)
+  readonly property var currentTrackItem: {
+    if (hasMedia) {
+      return Api.currentPlaybackTrack(
+        currentTrackId, remoteTrack, title, artist, album, artUrl,
+        lengthSeconds, currentExternalUrl)
+    }
+    return lastPlayedTrack || null
+  }
   readonly property string currentTrackItemUri: currentTrackItem
     ? String(currentTrackItem.uri || "") : ""
   readonly property bool currentTrackSaved: isSaved(currentTrackItem)
@@ -266,7 +291,7 @@ Item {
   readonly property var sonosControlDevice: findSonosControlDevice()
   readonly property bool sonosControlAvailable: useRemotePlayback
     && playbackRestricted && !!sonosControlDevice
-  readonly property bool playbackControllable: hasPlayer
+  readonly property bool playbackControllable: (hasPlayer || (authManager.loggedIn && !!lastPlayedTrack))
     && (!playbackRestricted || sonosControlAvailable)
   readonly property bool volumeSupported: useRemotePlayback
     ? !!remoteDevice && remoteDevice.supportsVolume === true
@@ -627,8 +652,10 @@ Item {
       recentTracks: recentTracks,
       topTracks: topTracks,
       topArtists: topArtists,
-      playlistDetails: playlistDetails
-      , albumDetails: albumDetails
+      playlistDetails: playlistDetails,
+      albumDetails: albumDetails,
+      lastTrack: lastPlayedTrack,
+      lastContextUri: lastPlayedContextUri
     }
   }
 
@@ -676,6 +703,11 @@ Item {
         homeLoaded = true
         catalogCacheApplied = true
       }
+      if (cached.lastTrack && cached.lastTrack.id) {
+        lastPlayedTrack = cached.lastTrack
+        lastPlayedContextUri = String(cached.lastContextUri || "")
+        catalogCacheApplied = true
+      }
     }
     catalogCacheReady = true
     if (cacheNeedsRewrite) scheduleCatalogCacheSave()
@@ -711,6 +743,49 @@ Item {
     var next = Api.shallowCopy(albumDetails)
     next[String(album.id)] = { item: album, items: items.slice(0, 50) }
     albumDetails = next
+    scheduleCatalogCacheSave()
+  }
+
+  function recordLastPlayedTrack() {
+    if (!hasMedia && !playing) return
+    if (!currentTrackItem || !currentTrackId) return
+    var item = currentTrackItem
+    var context = (remotePlayback && remotePlayback.contextUri)
+      ? String(remotePlayback.contextUri)
+      : (lastPlayedContextUri || "")
+    var cover = String(artUrl || item.imageUrl || (lastPlayedTrack && lastPlayedTrack.id === currentTrackId ? lastPlayedTrack.imageUrl : "") || "")
+    var trackArtists = (currentArtists && currentArtists.length)
+      ? currentArtists
+      : (item.artists && item.artists.length ? item.artists : (lastPlayedTrack && lastPlayedTrack.id === currentTrackId ? lastPlayedTrack.artists : []))
+    var duration = (Math.max(0, Number(lengthSeconds) || 0) * 1000)
+      || (item.durationMs ? Number(item.durationMs) : 0)
+      || (lastPlayedTrack && lastPlayedTrack.id === currentTrackId ? Number(lastPlayedTrack.durationMs) : 0)
+
+    var newTrack = {
+      kind: "item",
+      type: "track",
+      id: currentTrackId,
+      uri: currentTrackItemUri || ("spotify:track:" + currentTrackId),
+      name: String(title || item.name || "Sin título"),
+      subtitle: String(artist || item.subtitle || ""),
+      album: String(album || item.album || ""),
+      artists: Api.arrayValues(trackArtists),
+      imageUrl: cover,
+      durationMs: duration,
+      externalUrl: String(currentExternalUrl || item.externalUrl || "")
+    }
+
+    if (lastPlayedTrack
+        && lastPlayedTrack.id === newTrack.id
+        && lastPlayedTrack.name === newTrack.name
+        && lastPlayedTrack.subtitle === newTrack.subtitle
+        && lastPlayedTrack.imageUrl === newTrack.imageUrl
+        && lastPlayedContextUri === context) {
+      return
+    }
+
+    lastPlayedTrack = newTrack
+    lastPlayedContextUri = context
     scheduleCatalogCacheSave()
   }
 
@@ -3223,6 +3298,23 @@ Item {
     localActivationRequested = true
     deviceProbeAttempts = 0
     noteActivity()
+    if (contextUri) lastPlayedContextUri = String(contextUri)
+    if (item && item.id) {
+      lastPlayedTrack = {
+        kind: "item",
+        type: String(item.type || "track"),
+        id: String(item.id),
+        uri: String(item.uri || ("spotify:track:" + item.id)),
+        name: String(item.name || ""),
+        subtitle: String(item.subtitle || ""),
+        album: String(item.album || ""),
+        artists: Api.arrayValues(item.artists),
+        imageUrl: String(item.imageUrl || ""),
+        durationMs: Math.max(0, Number(item.durationMs) || 0),
+        externalUrl: String(item.externalUrl || "")
+      }
+      scheduleCatalogCacheSave()
+    }
 
     // Opening the panel refreshes current playback asynchronously. That wait
     // is only needed for the Web-API fallback: the local backend owns its
@@ -3446,6 +3538,19 @@ Item {
   function togglePlayback() {
     noteActivity()
     if (sendSonosControl(playing ? "pause" : "play", "")) return
+    if (!playing && !hasMedia && lastPlayedTrack) {
+      playItem(lastPlayedTrack, null, lastPlayedContextUri, "")
+      return
+    }
+    if (!useRemotePlayback && hasLocalPlayer && activePlayer.canTogglePlaying
+        && activePlayer.playbackState === MprisPlaybackState.Paused) {
+      activePlayer.togglePlaying()
+      return
+    }
+    if (!playing && lastPlayedTrack && (!hasLocalPlayer || playbackState === MprisPlaybackState.Stopped)) {
+      playItem(lastPlayedTrack, null, lastPlayedContextUri, "")
+      return
+    }
     if (!useRemotePlayback && hasLocalPlayer && activePlayer.canTogglePlaying) {
       activePlayer.togglePlaying()
       return
@@ -3857,9 +3962,14 @@ Item {
     localSocketWaitAttempts = 0
     localSocketWaitTimer.stop()
     cancelSleepTimer(false)
+    lastPlayedTrack = null
+    lastPlayedContextUri = ""
   }
 
-  onPlayingChanged: noteActivity()
+  onPlayingChanged: {
+    noteActivity()
+    if (playing && currentTrackId) recordLastPlayedTrack()
+  }
   onPlaybackStateChanged: {
     if ((sleepMode === "context" || sleepMode === "track")
         && playbackState === MprisPlaybackState.Stopped) sleepContextTimer.restart()
@@ -3869,7 +3979,10 @@ Item {
     if (sleepMode === "track" && sleepTrackUri && currentUri
         && currentUri !== sleepTrackUri) finishSleepTimer()
   }
-  onCurrentTrackItemUriChanged: syncCurrentTrackSaved(false)
+  onCurrentTrackItemUriChanged: {
+    syncCurrentTrackSaved(false)
+    if (currentTrackId && (hasMedia || playing)) recordLastPlayedTrack()
+  }
   onLyricsPluginAvailabilityChanged: resumeLyricsInstallIntent()
   onShellChanged: settingsSync.restart()
   onUiVisibleChanged: {

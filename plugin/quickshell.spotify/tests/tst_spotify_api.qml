@@ -125,6 +125,15 @@ TestCase {
   function test_catalogCacheKeepsOnlyTheStartupCollections() {
     var rows = []
     for (var i = 0; i < 35; i++) rows.push({ id: String(i) })
+    var lastTrackSample = {
+      id: "track1",
+      uri: "spotify:track:track1",
+      name: "Track One",
+      subtitle: "Artist One",
+      album: "Album One",
+      imageUrl: "https://example.com/cover.jpg",
+      durationMs: 180000
+    }
     var cache = Api.catalogCacheRecord({
       savedAt: 1234,
       playlistsLoaded: true,
@@ -137,6 +146,8 @@ TestCase {
       recentTracks: rows,
       topTracks: rows,
       topArtists: rows,
+      lastTrack: lastTrackSample,
+      lastContextUri: "spotify:playlist:pl1",
       playlistDetails: {
         one: { item: { id: "one", type: "playlist" }, items: rows },
         invalid: { item: { id: "invalid", type: "album" }, items: rows }
@@ -153,12 +164,18 @@ TestCase {
     compare(cache.playlistDetails.length, 1)
     compare(cache.playlistDetails[0].items.length, 35)
     compare(cache.albumDetails.length, 1)
+    compare(cache.lastTrack.id, "track1")
+    compare(cache.lastTrack.name, "Track One")
+    compare(cache.lastContextUri, "spotify:playlist:pl1")
     verify(cache.homeLoaded)
     verify(cache.secret === undefined)
     var parsed = Api.parseCatalogCache(Api.encodeCatalogCache(cache))
     compare(parsed.topArtists.length, 30)
     compare(parsed.playlistDetails[0].items.length, 35)
     compare(parsed.albumDetails[0].items.length, 35)
+    compare(parsed.lastTrack.id, "track1")
+    compare(parsed.lastTrack.name, "Track One")
+    compare(parsed.lastContextUri, "spotify:playlist:pl1")
     compare(Api.parseCatalogCache("not json").savedAt, 0)
   }
 

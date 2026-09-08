@@ -176,6 +176,43 @@ El plugin `quickshell.spotify` funciona como panel/servicio dentro de Quickshell
 - Búsqueda en el menú de Omarchy (`SUPER+SPACE`) muestra "Spotify" abriendo el cliente custom.
 - La opción de instalar el cliente oficial ya no aparece.
 
+## Precarga de la última canción y navegación de contexto en frío (2026-09-08)
+
+### Problema abordado
+1. Al reiniciar la sesión o abrir el reproductor tras haber estado apagado el backend, la interfaz no mostraba ninguna pista cargada ("No se está reproduciendo nada"), obligando a navegar manualmente a la biblioteca para reanudar la música.
+2. Tras implementar la precarga de la última pista, si el usuario abría el reproductor en frío y pulsaba los botones **Siguiente** o **Anterior** antes de darle a **Play**, las acciones no tenían efecto (`POST /me/player/next` fallaba porque aún no existía ningún dispositivo activo en Spotify).
+
+### Solución implementada
+1. **Persistencia de la última pista y su contexto en caché**:
+   - En `Api.js` y `Service.qml`, se extendió el registro de `catalog-cache.json` (`~/.local/state/omarchy-spotify/catalog-cache.json`) para almacenar:
+     - `lastTrack`: ID, URI, título, artista/subtítulo, álbum, artistas estructurados, carátula (`imageUrl`), duración y URL externa.
+     - `lastContextUri`: URI de Spotify del contexto de procedencia (`spotify:album:...` o `spotify:playlist:...`).
+     - `lastContextItems`: lista de hasta 50 pistas del contexto activo, preservando el orden de la lista.
+   - `recordLastPlayedTrack()` sincroniza y guarda automáticamente esta información ante cambios de canción (`onCurrentTrackItemUriChanged`) o al activarse la reproducción (`onPlayingChanged`).
+   - `clearData()` limpia los valores ante un cierre de sesión.
+
+2. **Precarga reactiva en la interfaz**:
+   - `lastPlayedTrack` se restaura al inicio en `applyCatalogCache(raw)`.
+   - Propiedades del servicio (`title`, `artist`, `album`, `artUrl`, `lengthSeconds`, `currentTrackItem`, `currentTrackId`) hacen fallback a `lastPlayedTrack` si el reproductor local está detenido y no hay reproducción remota activa.
+   - La propiedad `playbackControllable` permanece activa (`true`) si la sesión está iniciada y existe una pista precargada, habilitando los botones de la interfaz.
+
+3. **Reanudación y navegación directa en frío**:
+   - `togglePlayback()`: al pulsar Play sin reproducción activa, lanza `playItem(lastPlayedTrack, null, lastPlayedContextUri, "")`, arrancando el daemon e iniciando la canción dentro de su contexto original.
+   - `next()` y `previous()`: cuando el reproductor está detenido o en frío, invocan `findAdjacentTrack(direction)`, el cual localiza la canción adyacente dentro de `contextTracksForUri()` (álbum o playlist en caché, o lista previa).
+   - Inmediatamente actualizan la UI con los datos de la nueva pista y llaman a `playItem(...)` con el offset correspondiente, arrancando la reproducción directamente en esa pista sin requerir pulsar Play primero.
+   - Como salvaguarda adicional, si la pista no estuviera en la lista local, encolan un salto (`pendingSkipAfterStart`) que se ejecuta de forma inmediata en cuanto el backend arranca y conecta la sesión.
+
+### Archivos implicados
+- `plugin/quickshell.spotify/Api.js`: serialización y parseo de `lastTrack`, `lastContextUri` y `lastContextItems`.
+- `plugin/quickshell.spotify/Service.qml`: precarga, fallbacks de propiedades, `recordLastPlayedTrack`, `contextTracksForUri`, `findAdjacentTrack`, `next`, `previous`, `playItem` y `clearData`.
+- `plugin/quickshell.spotify/tests/tst_spotify_api.qml`: pruebas unitarias de persistencia en caché de `lastTrack`, `lastContextUri` y `lastContextItems`.
+
+### Validación
+- `qmllint` ejecutado sobre `Service.qml` y `Api.js`: 0 errores.
+- `omarchy plugin validate` ejecutado correctamente.
+- Sincronizado a `~/.config/omarchy/plugins/quickshell.spotify/` y recargado mediante `omarchy restart shell`.
+- Comprobado que en frío se muestra la pista previa y los botones Siguiente/Anterior cambian de pista e inician la reproducción en el contexto del álbum/playlist.
+
 ## Reglas de mantenimiento
 
 - No editar `/usr/share/omarchy`.

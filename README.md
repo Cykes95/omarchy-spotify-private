@@ -14,6 +14,10 @@ la barra de Omarchy. No contiene credenciales, tokens ni datos de sesión.
 - Hay controles **Apagar** en el minirreproductor y en el reproductor completo.
 - El catálogo se conserva localmente para que la biblioteca y las listas
   habituales aparezcan al instante al reabrir el cliente.
+- Precarga al iniciar la última canción reproducida, su carátula, álbum y lista de contexto,
+  permitiendo reanudar la reproducción con solo pulsar Play sin arrancar previamente el daemon.
+- Navegación en frío: los botones Siguiente y Anterior cambian de pista y arrancan la reproducción
+  directamente en la posición correspondiente del contexto guardado, sin requerir reproducir antes.
 - El transporte de Spotify admite hasta tres lecturas simultáneas y reduce
   temporalmente a una cuando Spotify aplica rate limiting.
 - Integrado en el menú de aplicaciones del sistema (`~/.local/share/applications/spotify.desktop`)

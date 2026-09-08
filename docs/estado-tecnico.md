@@ -1,6 +1,6 @@
 # Estado técnico y bitácora
 
-Actualizado: 2026-09-06
+Actualizado: 2026-09-08
 
 ## Arquitectura elegida
 
@@ -19,6 +19,10 @@ Rutas importantes:
 | Código local del plugin | `~/.config/omarchy/plugins/quickshell.spotify/` |
 | Configuración de la barra | `~/.config/omarchy/shell.json` |
 | Atajo de Hyprland | `~/.config/hypr/bindings.lua` |
+| Entrada de menú (.desktop) | `~/.local/share/applications/spotify.desktop` |
+| Script lanzador | `~/.local/bin/omarchy-launch-spotify` |
+| Iconos de aplicación | `~/.local/share/icons/hicolor/{64x64,128x128}/apps/spotify.png` |
+| Sobrescritura de menú de Omarchy | `~/.config/omarchy/extensions/omarchy-menu.jsonc` |
 | Backend compilado | `~/.local/lib/omarchy-spotify/omarchy-spotify-backend` |
 | Unidad nativa | `~/.config/systemd/user/omarchy-spotify.service` |
 | Unidad fallback | `~/.config/systemd/user/omarchy-spotifyd.service` |
@@ -148,6 +152,29 @@ parte de la persistencia y no son texto presentado directamente al usuario.
 
 Validación realizada: `omarchy restart shell`, comprobación del journal sin
 errores de sintaxis de QML y revisión visual del panel abierto en Biblioteca.
+
+## Integración en el menú de aplicaciones y lanzador del sistema (2026-09-08)
+
+### Problema abordado
+El plugin `quickshell.spotify` funciona como panel/servicio dentro de Quickshell y carecía de un archivo `.desktop` estándar en el sistema. Por ello, al abrir el menú de aplicaciones de Omarchy (`omarchy-menu` o `SUPER+SPACE` / `SUPER+ALT+SPACE`) no figuraba ningún cliente Spotify disponible, y la búsqueda de "spotify" únicamente mostraba la acción predeterminada de instalar el paquete oficial (`install.service.spotify`).
+
+### Componentes y configuración añadidos
+1. **Lanzador del plugin**:
+   - `~/.local/bin/omarchy-launch-spotify`: invoca `omarchy-shell shell summon quickshell.spotify '{}'`. Abre y enfoca el reproductor completo bajo demanda tanto desde el menú de aplicaciones como desde la terminal o llamadas `omarchy launch spotify`.
+2. **Entrada de escritorio (`.desktop`)**:
+   - `~/.local/share/applications/spotify.desktop`: registra la aplicación en el menú del sistema y lanzadores XDG con categorías multimedia (`Audio;Music;Player;AudioVideo;`), términos de búsqueda en español e inglés (`spotify`, `music`, `musica`, `reproductor`) y `StartupNotify=false`.
+   - Se incluye copia versionada en el repositorio en `desktop/spotify.desktop` y `desktop/omarchy-launch-spotify`.
+3. **Iconos**:
+   - Se instalaron los iconos de Spotify en `~/.local/share/icons/hicolor/128x128/apps/spotify.png` y `64x64/apps/spotify.png`, y se actualizó la caché de iconos con `gtk-update-icon-cache`.
+4. **Desactivación de la opción de instalar el cliente oficial**:
+   - En `~/.config/omarchy/extensions/omarchy-menu.jsonc` se añadió `"install.service.spotify": { "when": "false" }`, impidiendo que el menú vuelva a ofrecer la instalación del cliente oficial al buscar Spotify.
+5. **Limpieza del paquete oficial**:
+   - Se desinstaló completamente el paquete oficial de Spotify y sus dependencias no utilizadas mediante `omarchy pkg drop spotify`, liberando ~372 MiB, y se purgó la caché residual de `~/.cache/spotify`.
+
+### Validación
+- `omarchy menu refresh` y `omarchy restart shell` ejecutados correctamente.
+- Búsqueda en el menú de Omarchy (`SUPER+SPACE`) muestra "Spotify" abriendo el cliente custom.
+- La opción de instalar el cliente oficial ya no aparece.
 
 ## Reglas de mantenimiento
 

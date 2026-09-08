@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Spotify
+GenericName=Music Player
+GenericName[es]=Reproductor de música
+Comment=Spotify music player
+Comment[es]=Reproductor de música Spotify
+Exec=/home/andres/.local/bin/omarchy-launch-spotify
+Icon=spotify
+Terminal=false
+Categories=Audio;Music;Player;AudioVideo;
+Keywords=spotify;music;musica;player;reproductor;
+StartupNotify=false

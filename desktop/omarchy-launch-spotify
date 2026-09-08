@@ -1,0 +1,4 @@
+#!/bin/bash
+# omarchy:summary=Launch Omarchy Spotify custom client
+
+exec omarchy-shell shell summon quickshell.spotify '{}'

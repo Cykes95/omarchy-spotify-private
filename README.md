@@ -16,6 +16,10 @@ la barra de Omarchy. No contiene credenciales, tokens ni datos de sesión.
   habituales aparezcan al instante al reabrir el cliente.
 - El transporte de Spotify admite hasta tres lecturas simultáneas y reduce
   temporalmente a una cuando Spotify aplica rate limiting.
+- Integrado en el menú de aplicaciones del sistema (`~/.local/share/applications/spotify.desktop`)
+  mediante el lanzador `omarchy-launch-spotify` (`omarchy-shell shell summon quickshell.spotify '{}'`).
+- La sugerencia de instalar el cliente oficial en el menú de Omarchy está desactivada
+  en `~/.config/omarchy/extensions/omarchy-menu.jsonc`.
 
 Consulta [docs/estado-tecnico.md](docs/estado-tecnico.md) para el inventario
 de cambios, las verificaciones y el plan de continuación. El código activo se

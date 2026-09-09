@@ -1,4 +1,4 @@
-# Omarchy Spotify — privado
+# Omarchy Spotify
 
 Proyecto local para mantener y personalizar el cliente de Spotify integrado en
 la barra de Omarchy. No contiene credenciales, tokens ni datos de sesión.
